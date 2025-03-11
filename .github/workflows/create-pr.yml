@@ -1,0 +1,44 @@
+name: Create PR from GitHub Issue
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  update_json:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.REPO_DISPATCH_TOKEN }}
+
+      - name: Extract TransformID from Issue
+        run: |
+          TRANSFORM_ID=$(jq --raw-output '.issue.title | sub("New TransformID: "; "")' "$GITHUB_EVENT_PATH")
+          ENTRY_JSON=$(jq --raw-output '.issue.body | capture("(?<json>\\{.*\\})") | .json' "$GITHUB_EVENT_PATH")
+
+          echo "TransformID: $TRANSFORM_ID"
+          echo "Entry JSON: $ENTRY_JSON"
+
+          if [ -z "$TRANSFORM_ID" ] || [ -z "$ENTRY_JSON" ]; then
+            echo "Error: TransformID or JSON data missing!"
+            exit 1
+          fi
+
+          echo "$ENTRY_JSON" > transformIDs.json
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Add TransformID ${{ github.event.issue.title }}"
+          branch: "update-transform-${{ github.event.issue.title }}"
+          file_pattern: 'transformIDs.json'
+
+      - name: Open Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.REPO_DISPATCH_TOKEN }}
+          title: "Add TransformID ${{ github.event.issue.title }}"
+          branch: "update-transform-${{ github.event.issue.title }}"
+          base: main
+          body: "Automatically generated PR to add TransformID from issue."
